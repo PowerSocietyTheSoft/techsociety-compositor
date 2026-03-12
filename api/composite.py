@@ -13,11 +13,21 @@ FOOTER_TOP = 1002
 TITLE_START_Y = BADGE_BOTTOM + 25
 TITLE_MAX_HEIGHT = FOOTER_TOP - TITLE_START_Y - 20  # ~158px
 MAX_W_CHARS = 24
-FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# Font embarquée dans le projet
+FONT_PATH = os.path.join(os.path.dirname(__file__), "..", "Oswald-Bold.ttf")
 
 
 def clean_text(text):
     return unicodedata.normalize('NFC', text)
+
+
+def get_font(size):
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except Exception:
+        # Fallback absolu
+        return ImageFont.load_default()
 
 
 def build_composite(article_image_url: str, title: str) -> bytes:
@@ -40,14 +50,13 @@ def build_composite(article_image_url: str, title: str) -> bytes:
             print(f"Erreur image article: {e}")
             article_bg = None
 
-    # Fallback si image indispo
+    # Fallback fond noir
     if article_bg is None:
         article_bg = Image.new("RGBA", (W, H), (20, 20, 20, 255))
 
-    # 3. Cover : redimensionner pour couvrir tout le fond
+    # 3. Cover
     img_ratio = article_bg.width / article_bg.height
     frame_ratio = W / H
-
     if img_ratio > frame_ratio:
         new_h = H
         new_w = int(H * img_ratio)
@@ -60,12 +69,12 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     top = (new_h - H) // 2
     article_cropped = article_resized.crop((left, top, left + W, top + H))
 
-    # 4. Composer : image fond + cadre par-dessus
+    # 4. Composer
     composite = Image.new("RGBA", (W, H))
     composite.paste(article_cropped, (0, 0))
     composite.paste(frame, (0, 0), frame)
 
-    # 5. Titre — auto-sizing, minimum 36px, centré sous le badge
+    # 5. Titre auto-sizing
     draw = ImageDraw.Draw(composite)
     title = clean_text(title)
 
@@ -74,29 +83,21 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     chosen_line_height = 0
 
     for font_size in range(52, 34, -2):
-        try:
-            font = ImageFont.truetype(FONT_PATH, font_size)
-        except Exception:
-            font = ImageFont.load_default()
-
+        font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         lines = wrapped.split("\n")
         line_height = font_size + 16
         total_height = len(lines) * line_height
-
         if total_height <= TITLE_MAX_HEIGHT:
             chosen_font = font
             chosen_lines = lines
             chosen_line_height = line_height
             break
 
-    # Fallback minimum 36px — tronquer si nécessaire
+    # Fallback 36px tronqué
     if not chosen_font:
         font_size = 36
-        try:
-            chosen_font = ImageFont.truetype(FONT_PATH, font_size)
-        except Exception:
-            chosen_font = ImageFont.load_default()
+        chosen_font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         all_lines = wrapped.split("\n")
         chosen_line_height = font_size + 16
@@ -105,7 +106,7 @@ def build_composite(article_image_url: str, title: str) -> bytes:
         if len(all_lines) > max_lines and chosen_lines:
             chosen_lines[-1] = chosen_lines[-1][:-3] + "…"
 
-    # Dessin centré avec ombre portée
+    # Dessin centré avec ombre
     y_cursor = TITLE_START_Y
     for line in chosen_lines:
         bbox = draw.textbbox((0, 0), line, font=chosen_font)
@@ -115,7 +116,6 @@ def build_composite(article_image_url: str, title: str) -> bytes:
         draw.text((x, y_cursor), line, font=chosen_font, fill=(255, 255, 255, 255))
         y_cursor += chosen_line_height
 
-    # 6. Retourner les bytes JPEG
     output = io.BytesIO()
     composite.convert("RGB").save(output, format="JPEG", quality=92)
     return output.getvalue()
@@ -132,27 +132,22 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
-
         try:
             data = json.loads(body)
             image_url = data.get("image_url", "")
             title = data.get("title", "")
-
             if not title:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "title is required"}).encode())
                 return
-
             img_bytes = build_composite(image_url, title)
-
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(img_bytes)))
             self.end_headers()
             self.wfile.write(img_bytes)
-
         except Exception as e:
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
