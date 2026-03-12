@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/composite.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/composite",
+      "dest": "api/composite.py"
+    },
+    {
+      "src": "/health",
+      "dest": "api/composite.py"
+    }
+  ]
+}
