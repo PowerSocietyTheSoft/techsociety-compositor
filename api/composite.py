@@ -7,14 +7,14 @@ import unicodedata
 from http.server import BaseHTTPRequestHandler
 import json
 
-# Positions du cadre TechSociety (1080x1350)
-BADGE_BOTTOM = 799
-FOOTER_TOP = 1002
-TITLE_START_Y = BADGE_BOTTOM + 15
-TITLE_MAX_HEIGHT = FOOTER_TOP - TITLE_START_Y - 10  # ~178px
-MAX_W_CHARS = 26
+# Positions du cadre TechSociety SANS badge (1080x1350)
+LOGO_BOTTOM = 199
+URL_TOP = 1100
+TITLE_START_Y = LOGO_BOTTOM + 40   # 239
+TITLE_END_Y = URL_TOP - 30         # 1070
+TITLE_MAX_HEIGHT = TITLE_END_Y - TITLE_START_Y  # 831px
+MAX_W_CHARS = 20
 
-# Font embarquée dans le projet
 FONT_PATH = os.path.join(os.path.dirname(__file__), "..", "Oswald-Bold.ttf")
 
 
@@ -39,9 +39,7 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     article_bg = None
     if article_image_url and article_image_url.strip().startswith("http"):
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             resp = requests.get(article_image_url.strip(), timeout=20, headers=headers)
             resp.raise_for_status()
             article_bg = Image.open(io.BytesIO(resp.content)).convert("RGBA")
@@ -49,7 +47,6 @@ def build_composite(article_image_url: str, title: str) -> bytes:
             print(f"Erreur image article: {e}")
             article_bg = None
 
-    # Fallback fond noir
     if article_bg is None:
         article_bg = Image.new("RGBA", (W, H), (20, 20, 20, 255))
 
@@ -73,7 +70,7 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     composite.paste(article_cropped, (0, 0))
     composite.paste(frame, (0, 0), frame)
 
-    # 5. Titre auto-sizing de 52px jusqu'à 28px
+    # 5. Titre auto-sizing de 80px jusqu'à 36px
     draw = ImageDraw.Draw(composite)
     title = clean_text(title)
 
@@ -81,11 +78,11 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     chosen_lines = []
     chosen_line_height = 0
 
-    for font_size in range(52, 26, -2):
+    for font_size in range(80, 34, -2):
         font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         lines = wrapped.split("\n")
-        line_height = font_size + 14
+        line_height = font_size + 20
         total_height = len(lines) * line_height
         if total_height <= TITLE_MAX_HEIGHT:
             chosen_font = font
@@ -93,19 +90,19 @@ def build_composite(article_image_url: str, title: str) -> bytes:
             chosen_line_height = line_height
             break
 
-    # Fallback 28px tronqué avec "…"
+    # Fallback 36px
     if not chosen_font:
-        font_size = 28
+        font_size = 36
         chosen_font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         all_lines = wrapped.split("\n")
-        chosen_line_height = font_size + 14
+        chosen_line_height = font_size + 20
         max_lines = TITLE_MAX_HEIGHT // chosen_line_height
         chosen_lines = all_lines[:max_lines]
         if len(all_lines) > max_lines and chosen_lines:
             chosen_lines[-1] = chosen_lines[-1][:-3] + "…"
 
-    # Dessin centré verticalement dans la zone + ombre
+    # Centrer verticalement dans la zone
     total_text_height = len(chosen_lines) * chosen_line_height
     y_cursor = TITLE_START_Y + (TITLE_MAX_HEIGHT - total_text_height) // 2
 
@@ -113,7 +110,9 @@ def build_composite(article_image_url: str, title: str) -> bytes:
         bbox = draw.textbbox((0, 0), line, font=chosen_font)
         line_w = bbox[2] - bbox[0]
         x = (W - line_w) / 2
-        draw.text((x + 2, y_cursor + 2), line, font=chosen_font, fill=(0, 0, 0, 230))
+        # Ombre
+        draw.text((x + 3, y_cursor + 3), line, font=chosen_font, fill=(0, 0, 0, 200))
+        # Texte blanc
         draw.text((x, y_cursor), line, font=chosen_font, fill=(255, 255, 255, 255))
         y_cursor += chosen_line_height
 
