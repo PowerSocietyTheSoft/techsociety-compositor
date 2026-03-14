@@ -10,9 +10,9 @@ import json
 # Positions du cadre TechSociety (1080x1350)
 BADGE_BOTTOM = 799
 FOOTER_TOP = 1002
-TITLE_START_Y = BADGE_BOTTOM + 25
-TITLE_MAX_HEIGHT = FOOTER_TOP - TITLE_START_Y - 20  # ~158px
-MAX_W_CHARS = 24
+TITLE_START_Y = BADGE_BOTTOM + 15
+TITLE_MAX_HEIGHT = FOOTER_TOP - TITLE_START_Y - 10  # ~178px
+MAX_W_CHARS = 26
 
 # Font embarquée dans le projet
 FONT_PATH = os.path.join(os.path.dirname(__file__), "..", "Oswald-Bold.ttf")
@@ -26,7 +26,6 @@ def get_font(size):
     try:
         return ImageFont.truetype(FONT_PATH, size)
     except Exception:
-        # Fallback absolu
         return ImageFont.load_default()
 
 
@@ -74,7 +73,7 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     composite.paste(article_cropped, (0, 0))
     composite.paste(frame, (0, 0), frame)
 
-    # 5. Titre auto-sizing
+    # 5. Titre auto-sizing de 52px jusqu'à 28px
     draw = ImageDraw.Draw(composite)
     title = clean_text(title)
 
@@ -82,11 +81,11 @@ def build_composite(article_image_url: str, title: str) -> bytes:
     chosen_lines = []
     chosen_line_height = 0
 
-    for font_size in range(52, 34, -2):
+    for font_size in range(52, 26, -2):
         font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         lines = wrapped.split("\n")
-        line_height = font_size + 16
+        line_height = font_size + 14
         total_height = len(lines) * line_height
         if total_height <= TITLE_MAX_HEIGHT:
             chosen_font = font
@@ -94,20 +93,22 @@ def build_composite(article_image_url: str, title: str) -> bytes:
             chosen_line_height = line_height
             break
 
-    # Fallback 36px tronqué
+    # Fallback 28px tronqué avec "…"
     if not chosen_font:
-        font_size = 36
+        font_size = 28
         chosen_font = get_font(font_size)
         wrapped = textwrap.fill(title, width=MAX_W_CHARS)
         all_lines = wrapped.split("\n")
-        chosen_line_height = font_size + 16
+        chosen_line_height = font_size + 14
         max_lines = TITLE_MAX_HEIGHT // chosen_line_height
         chosen_lines = all_lines[:max_lines]
         if len(all_lines) > max_lines and chosen_lines:
             chosen_lines[-1] = chosen_lines[-1][:-3] + "…"
 
-    # Dessin centré avec ombre
-    y_cursor = TITLE_START_Y
+    # Dessin centré verticalement dans la zone + ombre
+    total_text_height = len(chosen_lines) * chosen_line_height
+    y_cursor = TITLE_START_Y + (TITLE_MAX_HEIGHT - total_text_height) // 2
+
     for line in chosen_lines:
         bbox = draw.textbbox((0, 0), line, font=chosen_font)
         line_w = bbox[2] - bbox[0]
